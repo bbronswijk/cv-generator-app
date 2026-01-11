@@ -1,105 +1,52 @@
-"use client"
+"use client";
 
-import { ResumeForm } from "@/components/resume-form"
-import { ResumePreview } from "@/components/resume-preview"
-import { ResumePDF } from "@/components/resume-pdf"
-import { Button } from "@/components/ui/button"
-import { Download } from "lucide-react"
-import { useState, useCallback } from "react"
-import { pdf } from "@react-pdf/renderer"
+import { Form } from "@/components/form/Form";
+import { ResumePreview } from "@/components/preview/ResumePreview";
+import { ResumePDF } from "@/components/pdf/ResumePDF";
+import { useEffect, useState } from "react";
+import { ResumeData } from "@/app/resume.types";
+import { getPossibleDataFromLocalStorage } from "@/components/form/utils/get-possible-data-from-local-storage";
+import { FormProvider, useForm } from "react-hook-form";
+import { Header } from "@/components/header/Header";
+import { INITIAL_DATA } from "@/components/form/utils/initial-data";
+import dynamic from "next/dynamic";
+import { Toaster } from "@/components/ui/sonner";
 
-export type ResumeData = {
-  personalInfo: {
-    fullName: string
-    email: string
-    phone: string
-    location: string
-    linkedin: string
-    website: string
-  }
-  summary: string
-  experiences: Array<{
-    id: string
-    jobTitle: string
-    company: string
-    location: string
-    startDate: string
-    endDate: string
-    current: boolean
-    description: string
-  }>
-  education: Array<{
-    id: string
-    degree: string
-    institution: string
-    location: string
-    graduationDate: string
-    gpa: string
-  }>
-  skills: string[]
-}
+// Dynamically import PDFDownloadLink to avoid SSR issues
+// https://stackoverflow.com/questions/76007339/server-error-error-pdfdownloadlink-is-a-web-specific-api-youre-either-using-t
+const PDFViewer = dynamic(() => import("@react-pdf/renderer").then((mod) => mod.PDFViewer), {
+  ssr: false,
+});
 
 export default function ResumePage() {
-  const [resumeData, setResumeData] = useState<ResumeData>({
-    personalInfo: {
-      fullName: "",
-      email: "",
-      phone: "",
-      location: "",
-      linkedin: "",
-      website: "",
-    },
-    summary: "",
-    experiences: [],
-    education: [],
-    skills: [],
-  })
+  const form = useForm<ResumeData>({
+    defaultValues: INITIAL_DATA,
+    mode: "onChange",
+  });
+  const resumeData = form.watch();
+  const [showPdf, setShowPdf] = useState(false);
 
-  const [isDownloading, setIsDownloading] = useState(false)
-
-  const handleResumeChange = useCallback((data: ResumeData) => {
-    setResumeData(data)
-  }, [])
-
-  const handleDownloadPDF = async () => {
-    setIsDownloading(true)
-    try {
-      const blob = await pdf(<ResumePDF data={resumeData} />).toBlob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `${resumeData.personalInfo.fullName || "resume"}.pdf`
-      link.click()
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error("Error generating PDF:", error)
-    } finally {
-      setIsDownloading(false)
-    }
-  }
+  useEffect(() => {
+    form.reset(getPossibleDataFromLocalStorage());
+  }, [form]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-foreground">Resume Generator</h1>
-          <Button onClick={handleDownloadPDF} disabled={isDownloading}>
-            <Download className="mr-2 h-4 w-4" />
-            {isDownloading ? "Generating..." : "Download PDF"}
-          </Button>
-        </div>
-      </header>
+    <FormProvider {...form}>
+      <form className="min-h-vh grid min-h-dvh grid-cols-[minmax(auto,1fr)_1fr] divide-x divide-gray-300">
+        <section>
+          <Header onPreview={() => setShowPdf((v) => !v)} showPdf={showPdf} />
+          <Form />
+        </section>
 
-      <main className="container mx-auto px-4 py-8">
-        <div className="grid lg:grid-cols-2 gap-8">
-          <div className="space-y-6">
-            <ResumeForm data={resumeData} onChange={handleResumeChange} />
-          </div>
-          <div className="lg:sticky lg:top-8 h-fit">
-            <ResumePreview data={resumeData} />
-          </div>
-        </div>
-      </main>
-    </div>
-  )
+        {showPdf ? (
+          <PDFViewer className="h-full w-full">
+            <ResumePDF data={resumeData} />
+          </PDFViewer>
+        ) : (
+          <ResumePreview />
+        )}
+      </form>
+      <Toaster />
+    </FormProvider>
+  );
 }
